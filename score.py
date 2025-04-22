@@ -1,75 +1,69 @@
-def score(predictions, golds):
-    def my_round(x):
-        return '%.3f' % x
+from collections import Counter
 
+def score(predictions, golds):
+    '''
+    Calculates a confusion matrix between predicted values and the true, actual values.
+    Also calculates the per class and averaged macro Precision, Recall, F1 Scores and overall Accuracy.
+
+    :param: predictions: A list of each prediction for all samples.
+    :param: golds: A list of all true classes for the predicted samples.
+    :return: Does not return the calculations but prints them out instead. 
+    '''
     assert len(predictions) == len(golds)
 
-    confusion_matrix = {}
+    confusion_matrix = Counter()
     for p,g in zip(predictions, golds):
-        confusion_matrix[(p,g)] = confusion_matrix.get((p,g), 0) + 1
+        confusion_matrix[(p,g)] += 1
 
-    assert sum(confusion_matrix.values()) == len(predictions)
+    assert confusion_matrix.total() == len(predictions)
 
+    # Simple way to make sure all unique types of classes are stored
     all_classes = set(predictions).union(golds)
-    acc = 0
-    macro_p = 0
-    macro_r = 0
-    macro_f = 0
-    for k in all_classes:
-        num = confusion_matrix.get((k,k), 0)
-        acc += num
+    
+    correct = 0
+    macro_precision = 0
+    macro_recall = 0
+    macro_f1score = 0
+    for clas in all_classes:
+        num = confusion_matrix[(clas,clas)]
+        correct += num
 
-        p_denom = sum([confusion_matrix.get((k,x), 0) for x in all_classes])
-        if p_denom == 0:
+        precision_denom = sum([confusion_matrix[(clas,x)] for x in all_classes])
+        if precision_denom == 0:
             print("WARNING: P undefined: Setting P to 0")
-            p = 0
+            precision = 0
         else:
-            p = num / float(p_denom)
+            precision = num / float(precision_denom)
 
-        r_denom = sum([confusion_matrix.get((x,k), 0) for x in all_classes])
-        if r_denom == 0:
+        recall_denom = sum([confusion_matrix[(x,clas)] for x in all_classes])
+        if recall_denom == 0:
             print("WARNING: R undefined: Setting R to 0")
-            r = 0
+            recall = 0
         else:
-            r = num / float(r_denom)
+            recall = num / float(recall_denom)
             
-        f_denom = p + r
-        if f_denom == 0:
+        f1score_denom = precision + recall
+        if f1score_denom == 0:
             print("WARNING: F undefined: Setting F to 0")
-            f = 0
+            f1score = 0
         else:
-            f = 2 * p * r / float(p + r)
+            f1score = 2 * precision * recall / float(f1score_denom)
 
-        macro_p += p
-        macro_r += r
-        macro_f += f
+        macro_precision += precision
+        macro_recall += recall
+        macro_f1score += f1score
 
-        print(k)
-        print("P:", my_round(p))
-        print("R:", my_round(r))
-        print("F:", my_round(f))
+        print(f"Current class: {clas}")
+        print(f"Precision: {round(precision, 3)}")
+        print(f"Recall: {round(precision, 3)}")
+        print(f"F1-Score: {round(precision, 3)}")
         print()
 
-    acc = acc / float(sum(confusion_matrix.values()))
-    macro_p = macro_p / float(len(all_classes))
-    macro_r = macro_r / float(len(all_classes))
-    macro_f = macro_f / float(len(all_classes))
-    print("Accuracy:", my_round(acc))
-    print("Macro averaged P:", my_round(macro_p))
-    print("Macro averaged R:", my_round(macro_r))
-    print("Macro averaged F:", my_round(macro_f))
-
-
-if __name__ == '__main__':
-    import sys
-
-    predictions_fname = sys.argv[1]
-    gold_standard_fname = sys.argv[2]
-
-    predictions = [x.strip() for x in open(predictions_fname,
-                                           encoding='utf8')]
-    print('Finished reading preds')
-    golds = [x.strip() for x in open(gold_standard_fname,
-                                     encoding='utf8')]
-    print('Finished reading golds')
-    score(predictions, golds)
+    accuracy = correct / float(confusion_matrix.total())
+    avg_macro_precision = macro_precision / float(len(all_classes))
+    avg_macro_recall = macro_recall / float(len(all_classes))
+    avg_macro_f1score = macro_f1score / float(len(all_classes))
+    print(f"Accuracy: {round(accuracy, 3)}")
+    print(f"Macro averaged P: {round(avg_macro_precision, 3)}")
+    print(f"Macro averaged R: {round(avg_macro_recall, 3)}")
+    print(f"Macro averaged F: {round(avg_macro_f1score, 3)}")

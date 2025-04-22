@@ -4,260 +4,360 @@
 
 import math, re
 import sys
+
+from collections import Counter
+
 # Do not use the following libraries for your code
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
 
 
-# A simple tokenizer. Applies case folding
 def tokenize(s):
+    '''
+    A simple word tokenizer. Applies case folding. Removes leading and trailing non-alphanumeric characters including punctuation for each word (token) in the text. Keeps any other non-alphanumeric characters within the word (token).
+
+    :param s: The input string to tokenize into separate words (tokens).
+    :return: Returns a list of all the words (tokens) from the input string. 
+    '''
+    
     tokens = s.lower().split()
     trimmed_tokens = []
     for t in tokens:
-        if re.search('\w', t):
-            # t contains at least 1 alphanumeric character
-            t = re.sub('^\W*', '', t)  # trim leading non-alphanumeric chars
-            t = re.sub('\W*$', '', t)  # trim trailing non-alphanumeric chars
+        if re.search(r'\w', t): # t contains at least 1 alphanumeric character
+            t = re.sub(r'^\W*', '', t)  # trim leading non-alphanumeric chars
+            t = re.sub(r'\W*$', '', t)  # trim trailing non-alphanumeric chars
         trimmed_tokens.append(t)
     return trimmed_tokens
 
 
-# A most-frequent class baseline
 class Baseline:
-    def __init__(self, klasses):
-        self.train(klasses)
+    '''
+    A baseline sentiment classifier. Will always classify text as the most common class.
+    '''
+    
+    def __init__(self, train_classes):
+        '''
+        Initializes the sentiment classifier. Must be given the training data.
 
-    def train(self, klasses):
-        # Count classes to determine which is the most frequent
-        klass_freqs = {}
-        for k in klasses:
-            klass_freqs[k] = klass_freqs.get(k, 0) + 1
-        self.mfc = sorted(klass_freqs, reverse=True,
-                          key=lambda x: klass_freqs[x])[0]
+        :param train_classes: A list of what each training sample's class is (e.g. 'negative', 'positive', 'negative', 'neutral', 'positive', etc.)
+        '''
+        self.train(train_classes)
 
+    
+    def train(self, train_classes):
+        '''
+        Determines the counts for each class based on the training data. Stores the most common class.
+
+        :param train_classes: A list of what each training sample's class is (e.g. 'negative', 'positive', 'negative', 'neutral', 'positive', etc.)
+        '''
+        
+        class_freqs = Counter(train_classes)
+        self.freq_class = class_freqs.most_common(1)[0][0]
+
+    
     def classify(self, test_instance):
-        return self.mfc
+        '''
+        Classifies some input text. Will always classify it as the most common class based on the training data.
+
+        :param test_instance: The text to classify. Doesn't actually use it for anything.
+        :return: Returns the classification for the text. Will be the most common class from the training data.
+        '''
+        return self.freq_class
 
 
-# A logistic regression baseline
 class LogReg:
-    def __init__(self, texts, klasses):
-        self.train(texts, klasses)
+    '''
+    A logistic regression based sentiment classifier.
+    '''
+    def __init__(self, texts, classes):
+        '''
+        Initializes the logistic regression sentiment classifier. Must be given the training text and classes.
 
-    def train(self, train_texts, train_klasses):
-        # sklearn provides functionality for tokenizing text and
-        # extracting features from it. This uses the tokenize function
-        # defined above for tokenization (as opposed to sklearn's
-        # default tokenization) so the results can be more easily
-        # compared with those using NB.
-        # http://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.CountVectorizer.html
-        self.count_vectorizer = CountVectorizer(analyzer=tokenize)
-        # train_counts will be a DxV matrix where D is the number of
-        # training documents and V is the number of types in the
-        # training documents. Each cell in the matrix indicates the
-        # frequency (count) of a type in a document.
+        :param texts: A list of all of the text being trained on.
+        :param classes: A list of each class for each training sample.
+        '''
+        self.train(texts, classes)
+
+    
+    def train(self, train_texts, train_classes):
+        '''
+        Trains the logistic regression sentiment classifier with training text and classes.
+
+        :param train_texts: A list of all of the texts being trained on.
+        :param train_classes: A list of each class for each training sample.
+        '''
+        
+        # Won't be using the default tokenizer for sklearn, specific one made above (a 'weaker', more barebones one)
+        self.count_vectorizer = CountVectorizer(tokenizer=tokenize, token_pattern=None)
+        
+        # train_counts will be a DxV matrix where D is the number of training documents. 
+        # V is the number of types in the training documents. 
+        # Each cell in the matrix indicates the frequency (count) of a type in a document.
         self.train_counts = self.count_vectorizer.fit_transform(train_texts)
-        # Train a logistic regression classifier on the training
-        # data. A wide range of options are available. This does
-        # something similar to what we saw in class, i.e., multinomial
-        # logistic regression (multi_class='multinomial') using
-        # stochastic average gradient descent (solver='sag') with L2
-        # regularization (penalty='l2'). The maximum number of
-        # iterations is set to 1000 (max_iter=1000) to allow the model
-        # to converge. The random_state is set to 0 (an arbitrarily
-        # chosen number) to help ensure results are consistent from
-        # run to run.
-        # http://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
-        self.lr = LogisticRegression(multi_class='multinomial',
-                                     solver='sag',
+        
+        # Train a logistic regression classifier on the training data. 
+        # Multinomial logistic regression using
+        # stochastic average gradient descent (solver='sag') with 
+        # L2 regularization (penalty='l2'). 
+        # The maximum number of iterations is set to 1000 (max_iter=1000) to allow the model to converge. 
+        # The random_state is set to 0 (an arbitrarily chosen number) to help ensure results are consistent from run to run.
+        lr = LogisticRegression(solver='sag',
                                      penalty='l2',
                                      max_iter=1000,
                                      random_state=0)
-        self.clf = self.lr.fit(self.train_counts, train_klasses)
+        
+        # Trains the logistic regression on the input training data
+        self.trained_lf = lr.fit(self.train_counts, train_classes)
 
+    
     def classify(self, test_instance):
-        # Transform the test documents into a DxV matrix, similar to
-        # that for the training documents, where D is the number of
-        # test documents, and V is the number of types in the training
-        # documents.
-        # test_counts = self.count_vectorizer.transform(test_texts)
+        '''
+        Classifies some input text. Input should only be one test sample, not multiple.
+
+        :param test_instance: The text string to analyze and predict the class (sentiment) of.
+        :return: Returns the predicted class for the input text.
+        '''
+        
+        # Transform the test documents into a DxV matrix, similar to that for the training documents
+        # D is the number of test documents (in this case just 1 since analyzing document by document)
+        # V is the number of types in the training documents.
+        # Each cell in the matrix indicates the frequency (count) of a type in the document.
         test_count = self.count_vectorizer.transform([test_instance])
-        # Predict the class for each test document  
-        # results = self.clf.predict(test_counts)
-        return self.clf.predict(test_count)[0]
+        
+        # Predict the class for the test document
+        return self.trained_lf.predict(test_count)[0]
 
 
-# Implement the lexicon-based baseline
-# You may change the parameters to each function
-class lexicon:
+class Lexicon:
+    '''
+    A lexicon-based sentiment classification baseline. Takes in a file of positive words and a file of negative words. Classify text based on which type of word it has more of.
+    '''
+    
     def __init__(self, pos_words, neg_words):
+        '''
+        Initializes the lexicon classification. Must be given the training data.
+
+        :param pos_words: A file name containing words classified as positive (one word per line).
+        :param neg_words: A file name containing words classified as negative (one word per line).
+        '''
+        
         self.posneg_words = {}
         self.train(pos_words, neg_words)
 
+    
     def train(self, pos_words, neg_words):
-        # Make a dictionary pos/neg words, key is the word and value is 1 if positive and -1 if negative
+        '''
+        Makes a dictionary containing all of the training words. If a positive word, value is 1, if negative the value is -1.
+
+        :param pos_words: A file name containing words classified as positive (one word per line).
+        :param neg_words: A file name containing words classified as negative (one word per line).
+        '''
+
         self.posneg_words.update({x.strip(): 1 for x in open(pos_words, encoding='utf8')})
         self.posneg_words.update({x.strip(): -1 for x in open(neg_words, encoding='utf8')})
 
+    
     def classify(self, test_instance):
-        value = 0
+        '''
+        Classifies text as positive, negative, or neutral based on the training words.
+        If the text has more positive words, it's positive, and same with negative words. If equal amount (or neither positive or negative words), neutral.
+
+        :param test_instance: The text to analyze and classify.
+        :return: Returns the classification given to the input text.
+        '''
+        
+        # Breaks the input text into the separate words.
         tokenized_instance = tokenize(test_instance)
 
         # For each token in the instance,
         # if pos word +1 to value, if neg word -1 to word, if neutral word just +0 to value
+        value = 0
         for token in tokenized_instance:
             value += self.posneg_words.get(token, 0)
         if value > 0:
             return "positive"
         elif value < 0:
             return "negative"
-        elif value == 0:
+        else:
             return "neutral"
 
 
-# Implement the multinomial Naive Bayes model with smoothing
 class NaiveBayes:
+    '''
+    A Naive Bayes (with smoothing) multinomial sentiment classification model  
+    '''
     def __init__(self, texts, classes):
-        self.word_pos_freq = {}
-        self.word_neg_freq = {}
-        self.word_neu_freq = {}
+        '''
+        Initializes the Naive Bayes classification. Must be given the training data as it automatically trains when initialized.
+        '''
+        self.word_pos_freq, self.word_neg_freq, self.word_neu_freq = Counter(), Counter(), Counter() 
 
-        self.word_pos_prob = {}
-        self.word_neg_prob = {}
-        self.word_neu_prob = {}
+        self.word_pos_prob, self.word_neg_prob, self.word_neu_prob = {}, {}, {}
 
-        self.unique_tokens: set = set()
+        self.unique_tokens = set()
 
         self.class_prob = {}
         self.train(texts, classes)
 
-    def train(self, train_texts, train_klasses):
-        # Calculates the # of docs in each class
-        klass_freqs = {}
-        for k in train_klasses:
-            klass_freqs[k] = klass_freqs.get(k, 0) + 1
+    
+    def train(self, train_texts, train_classes):
+        '''
+        Goes through all the training documents and calculates the probability for each class of document.
+        Also goes through each token seen in the documents and calculates the probability of the classes for each token.
+
+        :param train_texts: A list of all of the texts being trained on.
+        :param train_classes: A list of the class for each training sample.
+        '''
+        
         # Calculates the prob of a doc being a class
         # log(# docs in class k / # docs total)
-        for k in klass_freqs:
-            self.class_prob[k] = math.log(klass_freqs[k] / len(train_klasses))
+        # Logarithm of result for less small calculations that could have underflow issues
+        
+        class_freqs = Counter(train_classes)
+        for clas in class_freqs:
+            self.class_prob[clas] = math.log(class_freqs[clas] / class_freqs.total())
 
-        for index in range(len(train_texts)):
-            tokenized_doc = tokenize(train_texts[index])
-            doc_type = train_klasses[index]
+        # Count the number of times a token appears in each class of document
+        # Also store each unique token
+        
+        for index, text in enumerate(train_texts):
+            tokenized_doc = tokenize(text)
+            doc_type = train_classes[index]
             for token in tokenized_doc:
                 if token not in self.unique_tokens:
                     self.unique_tokens.add(token)
                 if doc_type == "positive":
-                    self.word_pos_freq[token] = self.word_pos_freq.get(token, 0) + 1
+                    self.word_pos_freq[token] += 1
                 elif doc_type == "negative":
-                    self.word_neg_freq[token] = self.word_neg_freq.get(token, 0) + 1
+                    self.word_neg_freq[token] += 1
                 elif doc_type == "neutral":
-                    self.word_neu_freq[token] = self.word_neu_freq.get(token, 0) + 1
+                    self.word_neu_freq[token] += 1
 
-        # Go through all the unique tokens and calculate their prob of appearing for each class
-        # Freq token appeared in training docs of class c + 1 / total tokens in docs of class c + # unique tokens
+        # Go through all the unique tokens and calculate their prob (with Laplace add 1 smoothing) of appearing for each class
+        # log(Freq token appeared in training docs of class c + 1 / (total tokens in docs of class c + # unique tokens))
+        # Logarithm of result for less small calculations that could have underflow issues
+        
         for token in self.unique_tokens:
-            self.word_pos_prob[token] = math.log((self.word_pos_freq.get(token, 0) + 1) /
-                                                 (sum(self.word_pos_freq.values()) + len(self.unique_tokens)))
-            self.word_neg_prob[token] = math.log((self.word_neg_freq.get(token, 0) + 1) /
-                                                 (sum(self.word_neg_freq.values()) + len(self.unique_tokens)))
-            self.word_neu_prob[token] = math.log((self.word_neu_freq.get(token, 0) + 1) /
-                                                 (sum(self.word_neu_freq.values()) + len(self.unique_tokens)))
+            self.word_pos_prob[token] = math.log((self.word_pos_freq[token] + 1) /
+                                                 (self.word_pos_freq.total() + len(self.unique_tokens)))
+            self.word_neg_prob[token] = math.log((self.word_neg_freq[token] + 1) /
+                                                 (self.word_neg_freq.total() + len(self.unique_tokens)))
+            self.word_neu_prob[token] = math.log((self.word_neu_freq[token] + 1) /
+                                                 (self.word_neu_freq.total() + len(self.unique_tokens)))
+        
 
     def classify(self, test_instance):
+        '''
+        Takes some unclassified text and classifies the sentiment of it as either positive, negative, or neutral based on the training data.
+
+        :param test_instance: The text to classify.
+        :return: Returns the predicted class for the input text.
+        '''
+        
+        # If for some reason a class doesn't appear in the training, it will never be used in classification
         class_options = {"positive": self.class_prob.get("positive", -math.inf),
                          "negative": self.class_prob.get("negative", -math.inf),
                          "neutral": self.class_prob.get("neutral", -math.inf)}
 
         for token in tokenize(test_instance):
-            # If the test token has been seen in the training data,
-            # get the previously calculated prob of that token for the class
-
-            # Else, calculate prob of token with freq of 1 (since smoothing) /
-            # tokens in docs of class c + # unique tokens
-
-            if token in self.unique_tokens:
-                ttoken_prob_pos = self.word_pos_prob[token]
-                ttoken_prob_neg = self.word_neg_prob[token]
-                ttoken_prob_neu = self.word_neu_prob[token]
-
-            else:
-                ttoken_prob_pos = math.log(1 / (sum(self.word_pos_freq.values()) + len(self.unique_tokens)))
-                ttoken_prob_neg = math.log(1 / (sum(self.word_neg_freq.values()) + len(self.unique_tokens)))
-                ttoken_prob_neu = math.log(1 / (sum(self.word_neu_freq.values()) + len(self.unique_tokens)))
-
             # Sum of the test doc's token probs + prior prob of class for all possible classes
-            class_options.update({"positive": class_options["positive"] + ttoken_prob_pos})
-            class_options.update({"negative": class_options["negative"] + ttoken_prob_neg})
-            class_options.update({"neutral": class_options["neutral"] + ttoken_prob_neu})
+            # If a token doesn't appear in the training documents, the default prob is 1 (since smoothing) / tokens in docs of class c + # unique tokens
+            # and shift the result into log space
+            class_options["positive"] += self.word_pos_prob.get(token, math.log(1 /
+                                                 (self.word_pos_freq.total() + len(self.unique_tokens))))
+            class_options["negative"] += self.word_neg_prob.get(token, math.log(1 /
+                                                 (self.word_neg_freq.total() + len(self.unique_tokens))))
+            class_options["neutral"] += self.word_neu_prob.get(token, math.log(1 /
+                                                 (self.word_neu_freq.total() + len(self.unique_tokens))))
 
-        # Getting key with the max value code adapted from here https://stackoverflow.com/a/280156
+        # Getting key with the max value
         return max(class_options, key=class_options.get)
 
 
-##Implement the binarized multinomial Naive Bayes model with smoothing
 class BinaryNaiveBayes:
+    '''
+    A modified version of the Naive Bayes (with smoothing) multinomial sentiment classification model.
+    A token in a single document will only count once (but if it shows up in separate documents it gets counted each time).
+    '''
+    
     def __init__(self, texts, classes):
-        self.word_pos_freq = {}
-        self.word_neg_freq = {}
-        self.word_neu_freq = {}
+        '''
+        Initializes the modified Naive Bayes classification. Must be given the training data as it automatically trains when initialized.
+        '''
+        
+        self.word_pos_freq, self.word_neg_freq, self.word_neu_freq = Counter(), Counter(), Counter() 
 
-        self.word_pos_prob = {}
-        self.word_neg_prob = {}
-        self.word_neu_prob = {}
+        self.word_pos_prob, self.word_neg_prob, self.word_neu_prob = {}, {}, {}
 
-        self.unique_tokens: set = set()
+        self.unique_tokens = set()
 
         self.class_prob = {}
+
         self.train(texts, classes)
 
-    def train(self, train_texts, train_klasses):
-        # Calculates the # of docs in each class
-        klass_freqs = {}
-        for k in train_klasses:
-            klass_freqs[k] = klass_freqs.get(k, 0) + 1
+    
+    def train(self, train_texts, train_classes):
+        '''
+        Goes through all the training documents and calculates the probability for each class of document.
+        Also goes through each token seen in the documents and calculates the probability of the classes for each token.
+
+        :param train_texts: A list of all of the texts being trained on.
+        :param train_classes: A list of the class for each training sample.
+        '''
+
         # Calculates the prob of a doc being a class
         # log(# docs in class k / # docs total)
-        for k in klass_freqs:
-            self.class_prob[k] = math.log(klass_freqs[k] / len(train_klasses))
+        # Logarithm of result for less small calculations that could have underflow issues
+        
+        class_freqs = Counter(train_classes)
+        for clas in class_freqs:
+            self.class_prob[clas] = math.log(class_freqs[clas] / class_freqs.total())
 
-        for index in range(len(train_texts)):
-            tokenized_doc = tokenize(train_texts[index])
+        for index, text in enumerate(train_texts):
+            tokenized_doc = tokenize(text)
 
             doc_set = set()
-            doc_type = train_klasses[index]
+            doc_type = train_classes[index]
 
             for token in tokenized_doc:
                 if token not in self.unique_tokens:
                     self.unique_tokens.add(token)
+                
+                # Only add token to count if not seen in the document previously
+                if token not in doc_set:
+                    doc_set.add(token)
 
-                # Only add token to count if not seen in the document's dictionary previously
-                if doc_type == "positive":
-                    if token not in doc_set:
-                        doc_set.add(token)
-                        self.word_pos_freq[token] = self.word_pos_freq.get(token, 0) + 1
+                    if doc_type == "positive":
+                        self.word_pos_freq[token] += 1
 
-                elif doc_type == "negative":
-                    if token not in doc_set:
-                        doc_set.add(token)
-                        self.word_neg_freq[token] = self.word_neg_freq.get(token, 0) + 1
+                    elif doc_type == "negative":
+                        self.word_neg_freq[token] += 1
 
-                elif doc_type == "neutral":
-                    if token not in doc_set:
-                        doc_set.add(token)
-                        self.word_neu_freq[token] = self.word_neu_freq.get(token, 0) + 1
+                    elif doc_type == "neutral":
+                        self.word_neu_freq[token] += 1
 
-        # Go through all the unique tokens and calculate their prob of appearing for each class
-        # Freq token appeared in training docs of class c + 1 / total tokens in docs of class c + # unique tokens
-        for unique_token in self.unique_tokens:
-            self.word_pos_prob[unique_token] = math.log((self.word_pos_freq.get(unique_token, 0) + 1) /
-                                                        (sum(self.word_pos_freq.values()) + len(self.unique_tokens)))
-            self.word_neg_prob[unique_token] = math.log((self.word_neg_freq.get(unique_token, 0) + 1) /
-                                                        (sum(self.word_neg_freq.values()) + len(self.unique_tokens)))
-            self.word_neu_prob[unique_token] = math.log((self.word_neu_freq.get(unique_token, 0) + 1) /
-                                                        (sum(self.word_neu_freq.values()) + len(self.unique_tokens)))
-
+        # Go through all the unique tokens and calculate their prob (with Laplace add 1 smoothing) of appearing for each class
+        # log(Freq token appeared in training docs of class c + 1 / (total tokens in docs of class c + # unique tokens))
+        # Logarithm of result for less small calculations that could have underflow issues
+        
+        for token in self.unique_tokens:
+            self.word_pos_prob[token] = math.log((self.word_pos_freq[token] + 1) /
+                                                 (self.word_pos_freq.total() + len(self.unique_tokens)))
+            self.word_neg_prob[token] = math.log((self.word_neg_freq[token] + 1) /
+                                                 (self.word_neg_freq.total() + len(self.unique_tokens)))
+            self.word_neu_prob[token] = math.log((self.word_neu_freq[token] + 1) /
+                                                 (self.word_neu_freq.total() + len(self.unique_tokens)))
+    
+    
     def classify(self, test_instance):
+        '''
+        Takes some unclassified text and classifies the sentiment of it as either positive, negative, or neutral based on the training data.
+
+        :param test_instance: The text to classify.
+        :return: Returns the predicted class for the input text.
+        '''
+        
+        # If for some reason a class doesn't appear in the training, it will never be used in classification
         class_options = {"positive": self.class_prob.get("positive", -math.inf),
                          "negative": self.class_prob.get("negative", -math.inf),
                          "neutral": self.class_prob.get("neutral", -math.inf)}
@@ -269,75 +369,15 @@ class BinaryNaiveBayes:
             if token not in test_instance_unique:
                 test_instance_unique.add(token)
 
-                if token in self.unique_tokens:
-                    ttoken_prob_pos = self.word_pos_prob[token]
-                    ttoken_prob_neg = self.word_neg_prob[token]
-                    ttoken_prob_neu = self.word_neu_prob[token]
-
-                else:
-                    ttoken_prob_pos = math.log(1 / (sum(self.word_pos_freq.values()) + len(self.unique_tokens)))
-                    ttoken_prob_neg = math.log(1 / (sum(self.word_neg_freq.values()) + len(self.unique_tokens)))
-                    ttoken_prob_neu = math.log(1 / (sum(self.word_neu_freq.values()) + len(self.unique_tokens)))
-
                 # Sum of the test doc's token probs + prior prob of class for all possible classes
-                class_options.update({"positive": class_options["positive"] + ttoken_prob_pos})
-                class_options.update({"negative": class_options["negative"] + ttoken_prob_neg})
-                class_options.update({"neutral": class_options["neutral"] + ttoken_prob_neu})
+                # If a token doesn't appear in the training documents, the default prob is 1 (since smoothing) / tokens in docs of class c + # unique tokens
+                # and shift the result into log space
+                class_options["positive"] += self.word_pos_prob.get(token, math.log(1 /
+                                                    (self.word_pos_freq.total() + len(self.unique_tokens))))
+                class_options["negative"] += self.word_neg_prob.get(token, math.log(1 /
+                                                    (self.word_neg_freq.total() + len(self.unique_tokens))))
+                class_options["neutral"] += self.word_neu_prob.get(token, math.log(1 /
+                                                 (self.word_neu_freq.total() + len(self.unique_tokens))))
 
-        # Getting key with the max value code from here https://stackoverflow.com/a/280156
+        # Getting key with the max value
         return max(class_options, key=class_options.get)
-
-
-if __name__ == '__main__':
-
-    sys.stdout.reconfigure(encoding='utf-8')
-
-    # Method will be one of 'baseline', 'lr', 'lexicon', 'nb', or 'nbbin'
-
-    method = sys.argv[1]
-
-    train_texts_fname = sys.argv[2]
-    train_klasses_fname = sys.argv[3]
-    test_texts_fname = sys.argv[4]
-
-    train_texts = [x.strip() for x in open(train_texts_fname,
-                                           encoding='utf8')]
-    train_klasses = [x.strip() for x in open(train_klasses_fname,
-                                             encoding='utf8')]
-    test_texts = [x.strip() for x in open(test_texts_fname,
-                                          encoding='utf8')]
-
-    # Check which method is being asked to implement from user
-    if method == 'baseline':
-        classifier = Baseline(train_klasses)
-
-    elif method == 'lr':
-        # Use sklearn's implementation of logistic regression
-        classifier = LogReg(train_texts, train_klasses)
-
-    elif method == 'lexicon':
-        # Should get accuracy of 0.44
-        classifier = lexicon("pos-words.txt", "neg-words.txt")
-
-    elif method == 'nb':
-        # Should get accuracy of 0.708
-        classifier = NaiveBayes(train_texts, train_klasses)
-
-    elif method == 'nbbin':
-        # Should get accuracy of .715/.713
-        classifier = BinaryNaiveBayes(train_texts, train_klasses)
-
-    else:
-        classifier = None
-    assert classifier is not None
-
-    # Run the classify method for each instance
-    results = [classifier.classify(x) for x in test_texts]
-
-    # Create output file at given output file name
-    # Store predictions in output file
-    outFile = sys.argv[5]
-    out = open(outFile, 'w', encoding='utf-8')
-    for r in results:
-        out.write(r + '\n')
-    out.close()
