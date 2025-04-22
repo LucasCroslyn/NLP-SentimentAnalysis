@@ -55,8 +55,8 @@ def score(predictions, golds):
 
         print(f"Current class: {clas}")
         print(f"Precision: {round(precision, 3)}")
-        print(f"Recall: {round(precision, 3)}")
-        print(f"F1-Score: {round(precision, 3)}")
+        print(f"Recall: {round(recall, 3)}")
+        print(f"F1-Score: {round(f1score, 3)}")
         print()
 
     accuracy = correct / float(confusion_matrix.total())
