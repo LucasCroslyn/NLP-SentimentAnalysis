@@ -7,6 +7,7 @@ This project was to develop a few different classifiers to determine the sentime
 - Naive Bayes: Uses the Naive Bayes multinomial algorithm with Laplace add 1 smoothing and transforms to logarithmic scale.
 - Binarized Naive Bayes: A modified version of the above classifier where each token per document is only used once.
 
+the different files in this project are:
 - The [Data](Data/) folder contains all of the training and testing data.
 - The [classify.py]() file contains the functions to create, train, and use the different classifiers.
 - The [score.py]() file contains the functions to analyze the results from the different classifiers against the true data.
