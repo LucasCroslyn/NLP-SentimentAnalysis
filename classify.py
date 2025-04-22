@@ -1,13 +1,6 @@
-#
-# Based on code from Dr. Paul Cook, UNB
-#
-
 import math, re
-import sys
 
 from collections import Counter
-
-# Do not use the following libraries for your code
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
 
